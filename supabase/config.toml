@@ -1,0 +1,8 @@
+# A string used to distinguish different Supabase projects on the same host. Required for local deployments.
+project_id = "yqgdqwefhadgruwmarwa"
+
+[api]
+enabled = true
+
+[functions.search-wines]
+verify_jwt = true

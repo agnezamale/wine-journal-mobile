@@ -13,6 +13,17 @@ jest.mock('./hooks/useWines', () => ({
     loading: false,
     error: null,
     fetchWines: jest.fn(),
+    createWine: jest.fn(),
+  }),
+}));
+
+jest.mock('./hooks/useWineSearch', () => ({
+  useWineSearch: () => ({
+    query: '',
+    setQuery: jest.fn(),
+    results: [],
+    loading: false,
+    error: null,
   }),
 }));
 

@@ -18,7 +18,9 @@ function MainTabs() {
         {activeTab === 'journal' && (
           <JournalScreen onAddWine={() => setActiveTab('add')} />
         )}
-        {activeTab === 'add' && <AddWineScreen />}
+        {activeTab === 'add' && (
+          <AddWineScreen onSaved={() => setActiveTab('journal')} />
+        )}
         {activeTab === 'discover' && <DiscoverScreen />}
       </View>
       <TabBar activeTab={activeTab} onChangeTab={setActiveTab} />
