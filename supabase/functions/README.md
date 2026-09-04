@@ -3,7 +3,7 @@
 This app uses the same Supabase project as the web journal (`yqgdqwefhadgruwmarwa`).
 Deploy functions from **this repo**. Do not put `WINE_API_KEY` in the Expo `.env`.
 
-## Deploy `search-wines`
+## Deploy functions
 
 1. Log in to the Supabase CLI (or set `SUPABASE_ACCESS_TOKEN` in this terminal only):
 
@@ -22,9 +22,12 @@ Deploy functions from **this repo**. Do not put `WINE_API_KEY` in the Expo `.env
 
    ```bash
    npm run functions:deploy:search
+   npm run functions:deploy:barcode
    ```
 
-4. In the Supabase Dashboard → Edge Functions → `search-wines`, confirm it is active.
+4. In the Supabase Dashboard → Edge Functions, confirm `search-wines` and `lookup-barcode` are active.
 
-The mobile app calls this via `supabase.functions.invoke('search-wines')`.
+The mobile app calls these via `supabase.functions.invoke`.
 The phone never sees `WINE_API_KEY`.
+
+Barcode lookup uses Open Food Facts. Scan still lets you type a name if the code is not in that catalog.

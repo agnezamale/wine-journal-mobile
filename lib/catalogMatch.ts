@@ -54,7 +54,15 @@ export function catalogToWineInput(wine: CatalogWine): WineInput {
     country: wine.country ?? null,
     grape_variety: wine.grape_variety ?? null,
     wine_type: wine.wine_type ?? null,
+    price: wine.price ?? null,
     external_id: wine.external_id,
     external_source: wine.external_source,
+    description: wine.description ?? null,
+    alcohol_content: wine.alcohol_content ?? null,
+    average_rating: wine.average_rating ?? null,
+    body: wine.body ?? null,
+    acidity: wine.acidity ?? null,
+    appellation: wine.appellation ?? null,
+    image_url: wine.image_url ?? null,
   };
 }

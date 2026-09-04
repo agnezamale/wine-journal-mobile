@@ -13,6 +13,17 @@ jest.mock('../lib/supabase', () => ({
   },
 }));
 
+const mockUploadWinePhoto = jest.fn();
+
+jest.mock('../lib/winePhotos', () => ({
+  pickPrimaryPhoto: (photos: unknown) => {
+    const list = Array.isArray(photos) ? photos : photos ? [photos] : [];
+    return list.find((photo: { is_primary?: boolean }) => photo.is_primary) ?? list[0] ?? null;
+  },
+  uploadWinePhoto: (...args: unknown[]) => mockUploadWinePhoto(...args),
+  attachPhotoUrls: jest.fn(async (wines: unknown) => wines),
+}));
+
 function createQuery(result: { data: unknown; error: { message: string } | null }) {
   const query: Record<string, jest.Mock> = {};
   const chain = () => query;
@@ -116,6 +127,45 @@ describe('useWines', () => {
     expect(mockGetUser).toHaveBeenCalled();
     expect(insertQuery.insert).toHaveBeenCalledWith({ name: 'New Wine', user_id: 'u1' });
     expect(created).toMatchObject({ id: 'w2', name: 'New Wine' });
+  });
+
+  it('uploads a photo after creating a wine', async () => {
+    const listQuery = createQuery({ data: [], error: null });
+    const insertQuery = createQuery({
+      data: {
+        id: 'w2',
+        user_id: 'u1',
+        name: 'New Wine',
+        created_at: '2026-01-02',
+        updated_at: '2026-01-02',
+      },
+      error: null,
+    });
+
+    mockFrom
+      .mockReturnValueOnce(listQuery)
+      .mockReturnValueOnce(insertQuery)
+      .mockReturnValueOnce(listQuery);
+
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'u1' } },
+      error: null,
+    });
+    mockUploadWinePhoto.mockResolvedValue({
+      id: 'p1',
+      wine_id: 'w2',
+      storage_path: 'u1/w2/label.jpg',
+      is_primary: true,
+    });
+
+    const { result } = renderHook(() => useWines());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.createWine({ name: 'New Wine' }, 'file:///label.jpg');
+    });
+
+    expect(mockUploadWinePhoto).toHaveBeenCalledWith('u1', 'w2', 'file:///label.jpg');
   });
 
   it('deletes a wine and removes it from local state', async () => {

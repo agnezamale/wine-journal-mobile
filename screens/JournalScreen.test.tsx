@@ -1,10 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 import { JournalScreen } from './JournalScreen';
 import type { WineWithNote } from '../types';
 
 const mockSignOut = jest.fn();
 const mockFetchWines = jest.fn();
+const mockDeleteWine = jest.fn();
 
 let mockAuth: {
   user: Partial<User> | null;
@@ -16,6 +18,7 @@ let mockWines: {
   loading: boolean;
   error: string | null;
   fetchWines: typeof mockFetchWines;
+  deleteWine: typeof mockDeleteWine;
 };
 
 jest.mock('../hooks/useAuth', () => ({
@@ -45,9 +48,11 @@ const sampleWine: WineWithNote = {
 
 describe('JournalScreen', () => {
   const onAddWine = jest.fn();
+  const onOpenWine = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
     mockAuth = {
       user: {
         email: 'me@wine.test',
@@ -60,19 +65,20 @@ describe('JournalScreen', () => {
       loading: false,
       error: null,
       fetchWines: mockFetchWines,
+      deleteWine: mockDeleteWine,
     };
   });
 
   it('shows a spinner while wines are loading', () => {
     mockWines.loading = true;
-    render(<JournalScreen onAddWine={onAddWine} />);
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
 
     expect(screen.getByTestId('journal-loading')).toBeOnTheScreen();
   });
 
   it('shows an error and retries', () => {
     mockWines.error = 'permission denied';
-    render(<JournalScreen onAddWine={onAddWine} />);
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
 
     expect(screen.getByText('permission denied')).toBeOnTheScreen();
     fireEvent.press(screen.getByText('Try again'));
@@ -80,7 +86,7 @@ describe('JournalScreen', () => {
   });
 
   it('shows the empty state and opens scan', () => {
-    render(<JournalScreen onAddWine={onAddWine} />);
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
 
     expect(screen.getByText('No wines yet')).toBeOnTheScreen();
     expect(screen.getByText('Hi, agne')).toBeOnTheScreen();
@@ -90,7 +96,7 @@ describe('JournalScreen', () => {
 
   it('lists wines from the journal', () => {
     mockWines.wines = [sampleWine];
-    render(<JournalScreen onAddWine={onAddWine} />);
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
 
     expect(screen.getByText('Test Barolo')).toBeOnTheScreen();
     expect(screen.getByText('Vietti · 2018 · Piedmont')).toBeOnTheScreen();
@@ -98,8 +104,32 @@ describe('JournalScreen', () => {
     expect(screen.queryByText('No wines yet')).toBeNull();
   });
 
+  it('opens a wine from the list', () => {
+    mockWines.wines = [sampleWine];
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
+
+    fireEvent.press(screen.getByText('Test Barolo'));
+
+    expect(onOpenWine).toHaveBeenCalledWith('w1');
+  });
+
+  it('removes a wine after confirmation', () => {
+    mockWines.wines = [sampleWine];
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      const remove = buttons?.find((button) => button.text === 'Remove');
+      remove?.onPress?.();
+    });
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
+
+    fireEvent.press(screen.getByLabelText('Remove Test Barolo'));
+
+    expect(Alert.alert).toHaveBeenCalled();
+    expect(mockDeleteWine).toHaveBeenCalledWith('w1');
+    expect(onOpenWine).not.toHaveBeenCalled();
+  });
+
   it('signs out from the header', () => {
-    render(<JournalScreen onAddWine={onAddWine} />);
+    render(<JournalScreen onAddWine={onAddWine} onOpenWine={onOpenWine} />);
 
     fireEvent.press(screen.getByText('Sign out'));
     expect(mockSignOut).toHaveBeenCalled();

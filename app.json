@@ -25,11 +25,19 @@
     "plugins": [
       [
         "expo-image-picker",
-    {
-      "cameraPermission": "Take a photo of the wine label.",
-      "photosPermission": "Choose a wine label photo from your library."
-    }
-  ]
-]
+        {
+          "cameraPermission": "Take a photo of the wine label.",
+          "photosPermission": "Choose a wine label photo from your library."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan a barcode on the wine bottle.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ]
   }
 }

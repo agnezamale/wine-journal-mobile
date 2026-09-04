@@ -45,14 +45,12 @@ export function searchWines(query: string, limit = 10) {
   });
 }
 
-export function lookupBarcode(barcode: string) {
-  return invokeFunction<{ result: CatalogWine | null }>('lookup-barcode', { barcode });
+export function getCatalogWine(id: string) {
+  return invokeFunction<{ result: CatalogWine | null }>('search-wines', { id });
 }
 
-export function identifyLabel(storagePath: string) {
-  return invokeFunction<{ candidates: CatalogWine[] }>('identify-label', {
-    storage_path: storagePath,
-  });
+export function lookupBarcode(barcode: string) {
+  return invokeFunction<{ result: CatalogWine | null }>('lookup-barcode', { barcode });
 }
 
 export function recommendWines(count = 5, occasion?: string) {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { Wine } from '../types';
 import { WineCard } from './WineCard';
 
@@ -53,5 +53,31 @@ describe('WineCard', () => {
     expect(screen.getByText('Rioja')).toBeOnTheScreen();
     expect(screen.queryByText(/Example Estate/)).toBeNull();
     expect(screen.queryByText('red')).toBeNull();
+  });
+
+  it('calls onPress when tapped', () => {
+    const onPress = jest.fn();
+    render(<WineCard wine={baseWine} onPress={onPress} />);
+
+    fireEvent.press(screen.getByText('Château Example'));
+
+    expect(onPress).toHaveBeenCalled();
+  });
+
+  it('calls onRemove from the remove control', () => {
+    const onRemove = jest.fn();
+    const onPress = jest.fn();
+    render(<WineCard wine={baseWine} onPress={onPress} onRemove={onRemove} />);
+
+    fireEvent.press(screen.getByLabelText('Remove Château Example'));
+
+    expect(onRemove).toHaveBeenCalled();
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('shows the wine label photo', () => {
+    render(<WineCard wine={baseWine} photoUrl="https://cdn.example/label.jpg" />);
+
+    expect(screen.getByLabelText('Wine label')).toBeOnTheScreen();
   });
 });

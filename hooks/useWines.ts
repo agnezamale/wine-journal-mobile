@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { TastingNote, Wine, WineInput, WineWithNote } from '../types';
+import { attachPhotoUrls, pickPrimaryPhoto, uploadWinePhoto } from '../lib/winePhotos';
+import type { TastingNote, Wine, WineInput, WinePhoto, WineWithNote } from '../types';
 
 type WineRow = Wine & {
   tasting_notes?: TastingNote[] | TastingNote | null;
+  wine_photos?: WinePhoto[] | WinePhoto | null;
 };
 
 export type TastingNoteInput = {
@@ -16,8 +18,9 @@ export type TastingNoteInput = {
 function mapWineRow(row: WineRow): WineWithNote {
   const notes = row.tasting_notes;
   const tasting_note = Array.isArray(notes) ? notes[0] ?? null : notes ?? null;
-  const { tasting_notes: _ignored, ...wine } = row;
-  return { ...wine, tasting_note };
+  const primary_photo = pickPrimaryPhoto(row.wine_photos);
+  const { tasting_notes: _ignored, wine_photos: _photos, ...wine } = row;
+  return { ...wine, tasting_note, primary_photo };
 }
 
 function hasTastingContent(note: TastingNoteInput): boolean {
@@ -80,14 +83,14 @@ export function useWines() {
 
     const { data, error: fetchError } = await supabase
       .from('wines')
-      .select('*, tasting_notes(*)')
+      .select('*, tasting_notes(*), wine_photos(*)')
       .order('created_at', { ascending: false });
 
     if (fetchError) {
       setError(fetchError.message);
       setWines([]);
     } else {
-      setWines(((data as WineRow[]) ?? []).map(mapWineRow));
+      setWines(await attachPhotoUrls(((data as WineRow[]) ?? []).map(mapWineRow)));
     }
 
     setLoading(false);
@@ -100,7 +103,7 @@ export function useWines() {
   const getWine = useCallback(async (id: string): Promise<WineWithNote> => {
     const { data, error: fetchError } = await supabase
       .from('wines')
-      .select('*, tasting_notes(*)')
+      .select('*, tasting_notes(*), wine_photos(*)')
       .eq('id', id)
       .single();
 
@@ -108,10 +111,14 @@ export function useWines() {
       throw new Error(fetchError.message);
     }
 
-    return mapWineRow(data as WineRow);
+    const [wine] = await attachPhotoUrls([mapWineRow(data as WineRow)]);
+    return wine;
   }, []);
 
-  const createWine = useCallback(async (input: WineInput): Promise<Wine> => {
+  const createWine = useCallback(async (
+    input: WineInput,
+    photoUri?: string | null,
+  ): Promise<Wine> => {
     setMutating(true);
     setError(null);
 
@@ -127,8 +134,13 @@ export function useWines() {
         throw new Error(insertError.message);
       }
 
+      const wine = data as Wine;
+      if (photoUri) {
+        await uploadWinePhoto(userId, wine.id, photoUri);
+      }
+
       await fetchWines();
-      return data as Wine;
+      return wine;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create wine';
       setError(message);

@@ -14,6 +14,13 @@ export interface Wine {
   barcode?: string;
   external_id?: string;
   external_source?: string;
+  description?: string;
+  alcohol_content?: number;
+  average_rating?: number;
+  body?: string;
+  acidity?: string;
+  appellation?: string;
+  image_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +38,13 @@ export type WineInput = {
   barcode?: string | null;
   external_id?: string | null;
   external_source?: string | null;
+  description?: string | null;
+  alcohol_content?: number | null;
+  average_rating?: number | null;
+  body?: string | null;
+  acidity?: string | null;
+  appellation?: string | null;
+  image_url?: string | null;
 };
 
 export interface TastingNote {
@@ -54,6 +68,7 @@ export interface WinePhoto {
 export interface WineWithNote extends Wine {
   tasting_note?: TastingNote | null;
   primary_photo?: WinePhoto | null;
+  photoUrl?: string | null;
 }
 
 export interface CatalogWine {
@@ -67,6 +82,13 @@ export interface CatalogWine {
   grape_variety?: string;
   wine_type?: WineType;
   price?: number;
+  description?: string;
+  alcohol_content?: number;
+  average_rating?: number;
+  image_url?: string;
+  body?: string;
+  acidity?: string;
+  appellation?: string;
 }
 
 export interface Recommendation {

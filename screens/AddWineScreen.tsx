@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -12,9 +12,14 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Camera, CameraView } from 'expo-camera';
+import { BarcodeScannerOverlay } from '../components/BarcodeScannerOverlay';
 import { useWineSearch } from '../hooks/useWineSearch';
 import { useWines } from '../hooks/useWines';
+import { isPlausibleBarcode, normalizeBarcode, WINE_BARCODE_TYPES } from '../lib/barcode';
 import { catalogToWineInput, visibleCatalogResults } from '../lib/catalogMatch';
+import { getCatalogWine, lookupBarcode } from '../lib/edgeFunctions';
+import { knownBarcodeProduct } from '../lib/knownBarcodes';
 import type { CatalogWine } from '../types';
 
 type AddWineScreenProps = {
@@ -25,11 +30,108 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CatalogWine | null>(null);
+  const [catalogDetails, setCatalogDetails] = useState<CatalogWine | null>(null);
+  const [barcode, setBarcode] = useState<string | null>(null);
+  const [barcodeProduct, setBarcodeProduct] = useState<CatalogWine | null>(null);
+  const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [showAllResults, setShowAllResults] = useState(false);
   const [saving, setSaving] = useState(false);
   const { query, setQuery, results, loading, error: searchError } = useWineSearch();
   const { visible, hiddenCount } = visibleCatalogResults(results, query, showAllResults);
   const { createWine } = useWines();
+  const matches = [
+    ...(barcodeProduct ? [barcodeProduct] : []),
+    ...visible.filter((wine) => wine.external_id !== barcodeProduct?.external_id),
+  ];
+  const barcodeLock = useRef(false);
+
+  useEffect(() => {
+    if (!selected) {
+      setCatalogDetails(null);
+      return;
+    }
+
+    if (selected.external_source === 'openfoodfacts' || selected.external_source === 'gtin') {
+      setCatalogDetails(selected);
+      return;
+    }
+
+    let cancelled = false;
+
+    getCatalogWine(selected.external_id)
+      .then((data) => {
+        if (!cancelled) setCatalogDetails(data.result ?? selected);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogDetails(selected);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const applyBarcode = async (raw: string) => {
+    const code = normalizeBarcode(raw);
+    if (!isPlausibleBarcode(code)) {
+      setError('That barcode does not look valid. Try again, or type the name.');
+      return;
+    }
+    if (barcodeLock.current) return;
+    barcodeLock.current = true;
+
+    setShowScanner(false);
+    setError(null);
+    setBarcode(code);
+    setBarcodeProduct(null);
+    setSelected(null);
+    setCatalogDetails(null);
+    setLookingUpBarcode(true);
+
+    try {
+      const data = await lookupBarcode(code);
+      const result = data.result ?? knownBarcodeProduct(code);
+      if (result) {
+        setBarcodeProduct(result);
+        setSelected(result);
+        setQuery(result.producer || result.name);
+      } else {
+        setError(`No product for barcode ${code}. Type the name from the label.`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Barcode lookup failed');
+    } finally {
+      barcodeLock.current = false;
+      setLookingUpBarcode(false);
+    }
+  };
+
+  const startBarcodeScan = async () => {
+    setError(null);
+
+    const permission = await Camera.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setError('Camera permission is required to scan a barcode.');
+      return;
+    }
+
+    if (CameraView.isModernBarcodeScannerAvailable) {
+      const subscription = CameraView.onModernBarcodeScanned((event) => {
+        subscription.remove();
+        void CameraView.dismissScanner();
+        void applyBarcode(event.data);
+      });
+      try {
+        await CameraView.launchScanner({ barcodeTypes: WINE_BARCODE_TYPES });
+      } catch {
+        subscription.remove();
+      }
+      return;
+    }
+
+    setShowScanner(true);
+  };
 
   const takePhoto = async () => {
     setError(null);
@@ -73,8 +175,9 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
   const handleAddToJournal = async () => {
     setError(null);
 
-    const input = selected
-      ? catalogToWineInput(selected)
+    const catalogWine = catalogDetails ?? selected;
+    const input = catalogWine
+      ? catalogToWineInput(catalogWine)
       : { name: query.trim() };
 
     if (!input.name) {
@@ -82,9 +185,13 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
       return;
     }
 
+    if (barcode) {
+      input.barcode = barcode;
+    }
+
     setSaving(true);
     try {
-      await createWine(input);
+      await createWine(input, photoUri);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add wine');
@@ -105,8 +212,16 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
       >
         <Text style={styles.title}>Add wine</Text>
         <Text style={styles.subtitle}>
-          Type the name from the label, or take a photo first.
+          Scan the barcode, type the name from the label, or take a photo.
         </Text>
+
+        {photoUri ? (
+          <Image
+            source={{ uri: photoUri }}
+            style={styles.preview}
+            accessibilityLabel="Wine label preview"
+          />
+        ) : null}
 
         <View style={styles.search}>
           <Text style={styles.label}>What does the label say?</Text>
@@ -116,6 +231,7 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
             value={query}
             onChangeText={(text) => {
               setSelected(null);
+              setCatalogDetails(null);
               setShowAllResults(false);
               setQuery(text);
             }}
@@ -125,10 +241,18 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
             textContentType="none"
           />
 
+          {lookingUpBarcode ? <Text>Looking up barcode…</Text> : null}
           {loading ? <Text>Searching…</Text> : null}
           {searchError ? <Text style={styles.error}>{searchError}</Text> : null}
+          {barcode && !lookingUpBarcode ? (
+            <Text style={styles.resultMeta}>
+              {barcodeProduct
+                ? `${barcodeProduct.name} · ${barcode}`
+                : `Barcode ${barcode}`}
+            </Text>
+          ) : null}
 
-          {visible.map((wine) => {
+          {matches.map((wine) => {
             const meta = [wine.producer, wine.vintage, wine.region]
               .filter(Boolean)
               .join(' · ');
@@ -142,6 +266,9 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
               >
                 <Text style={styles.resultName}>{wine.name}</Text>
                 {meta ? <Text style={styles.resultMeta}>{meta}</Text> : null}
+                {barcode && wine.external_id === barcodeProduct?.external_id ? (
+                  <Text style={styles.resultMeta}>Barcode {barcode}</Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -155,38 +282,14 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
           {selected ? (
             <Text style={styles.selected}>Selected: {selected.name}</Text>
           ) : null}
-
-          {(selected || query.trim().length >= 2) ? (
-            <Pressable
-              style={[styles.card, styles.saveButton]}
-              onPress={handleAddToJournal}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.saveTitle}>Add to journal</Text>
-                  <Text style={styles.saveBody}>
-                    {selected
-                      ? selected.name
-                      : `Save “${query.trim()}” without a catalog match`}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          ) : null}
         </View>
 
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={styles.preview}
-            accessibilityLabel="Wine label preview"
-          />
-        ) : null}
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable style={styles.card} onPress={startBarcodeScan}>
+          <Text style={styles.cardTitle}>Scan barcode</Text>
+          <Text style={styles.cardBody}>Use the code on the back of the bottle</Text>
+        </Pressable>
 
         <Pressable style={styles.card} onPress={takePhoto}>
           <Text style={styles.cardTitle}>Scan label</Text>
@@ -197,11 +300,40 @@ export function AddWineScreen({ onSaved }: AddWineScreenProps) {
           <Text style={styles.link}>Choose from library</Text>
         </Pressable>
 
+        {(selected || query.trim().length >= 2) ? (
+          <Pressable
+            style={[styles.card, styles.saveButton]}
+            onPress={handleAddToJournal}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.saveTitle}>Add to journal</Text>
+                <Text style={styles.saveBody}>
+                  {selected
+                    ? selected.name
+                    : `Save “${query.trim()}” without a catalog match`}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        ) : null}
+
         <Pressable style={styles.card} onPress={handleAddToJournal} disabled={saving}>
           <Text style={styles.cardTitle}>Add manually</Text>
           <Text style={styles.cardBody}>Name, producer, vintage, notes</Text>
         </Pressable>
       </ScrollView>
+      {showScanner ? (
+        <BarcodeScannerOverlay
+          onScanned={(value) => {
+            void applyBarcode(value);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

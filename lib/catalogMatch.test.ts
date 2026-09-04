@@ -57,8 +57,16 @@ describe('catalogMatch', () => {
       country: null,
       grape_variety: null,
       wine_type: null,
+      price: null,
       external_id: '1',
       external_source: 'wineapi.io',
+      description: null,
+      alcohol_content: null,
+      average_rating: null,
+      body: null,
+      acidity: null,
+      appellation: null,
+      image_url: null,
     });
   });
 });

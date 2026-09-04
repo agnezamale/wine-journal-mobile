@@ -1,5 +1,6 @@
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     Pressable,
     StyleSheet,
@@ -9,15 +10,34 @@ import {
   import { useAuth } from '../hooks/useAuth';
   import { useWines } from '../hooks/useWines';
   import { WineCard } from '../components/WineCard';
+  import type { WineWithNote } from '../types';
   
   type JournalScreenProps = {
     onAddWine: () => void;
+    onOpenWine: (id: string) => void;
   };
   
-  export function JournalScreen({ onAddWine }: JournalScreenProps) {
+  export function JournalScreen({ onAddWine, onOpenWine }: JournalScreenProps) {
     const { user, signOut } = useAuth();
-    const { wines, loading, error, fetchWines } = useWines();
+    const { wines, loading, error, fetchWines, deleteWine } = useWines();
     const username = user?.user_metadata?.username as string | undefined;
+
+    const confirmRemove = (wine: WineWithNote) => {
+      Alert.alert(
+        'Remove wine',
+        `Remove “${wine.name}” from your journal? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => {
+              void deleteWine(wine.id);
+            },
+          },
+        ],
+      );
+    };
   
     if (loading) {
       return (
@@ -68,7 +88,13 @@ import {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => (
-              <WineCard wine={item} rating={item.tasting_note?.rating} />
+              <WineCard
+                wine={item}
+                rating={item.tasting_note?.rating}
+                photoUrl={item.photoUrl ?? item.image_url}
+                onPress={() => onOpenWine(item.id)}
+                onRemove={() => confirmRemove(item)}
+              />
             )}
           />
         )}

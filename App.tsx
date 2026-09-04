@@ -8,22 +8,42 @@ import { TabBar, type TabName } from './components/TabBar';
 import { JournalScreen } from './screens/JournalScreen';
 import { AddWineScreen } from './screens/AddWineScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
+import { WineDetailScreen } from './screens/WineDetailScreen';
 
 function MainTabs() {
   const [activeTab, setActiveTab] = useState<TabName>('journal');
+  const [selectedWineId, setSelectedWineId] = useState<string | null>(null);
+
+  const onChangeTab = (tab: TabName) => {
+    setSelectedWineId(null);
+    setActiveTab(tab);
+  };
 
   return (
     <View style={styles.shell}>
       <View style={styles.body}>
-        {activeTab === 'journal' && (
-          <JournalScreen onAddWine={() => setActiveTab('add')} />
-        )}
+        {activeTab === 'journal' && selectedWineId ? (
+          <WineDetailScreen
+            wineId={selectedWineId}
+            onBack={() => setSelectedWineId(null)}
+          />
+        ) : activeTab === 'journal' ? (
+          <JournalScreen
+            onAddWine={() => setActiveTab('add')}
+            onOpenWine={setSelectedWineId}
+          />
+        ) : null}
         {activeTab === 'add' && (
-          <AddWineScreen onSaved={() => setActiveTab('journal')} />
+          <AddWineScreen onSaved={() => {
+            setSelectedWineId(null);
+            setActiveTab('journal');
+          }} />
         )}
         {activeTab === 'discover' && <DiscoverScreen />}
       </View>
-      <TabBar activeTab={activeTab} onChangeTab={setActiveTab} />
+      {selectedWineId ? null : (
+        <TabBar activeTab={activeTab} onChangeTab={onChangeTab} />
+      )}
       <StatusBar style="auto" />
     </View>
   );

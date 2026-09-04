@@ -16,6 +16,13 @@ type WineApiSearchItem = {
   grapes?: Array<string | { name?: string }> | null;
   averageRating?: number | null;
   confidence?: number | null;
+  body?: string | null;
+  acidity?: string | null;
+  description?: string | null;
+  alcoholContent?: number | null;
+  imageUrl?: string | null;
+  appellation?: string | { name?: string } | null;
+  priceRange?: { min?: number; max?: number; currency?: string } | null;
 };
 
 type WineApiSearchResponse = {
@@ -61,6 +68,9 @@ function mapCatalogWine(item: WineApiSearchItem) {
     ? undefined
     : Number(vintageRaw);
 
+  const price = item.priceRange?.min;
+  const alcohol = item.alcoholContent;
+
   return {
     external_id: String(item.id ?? ''),
     external_source: 'wineapi.io',
@@ -73,6 +83,14 @@ function mapCatalogWine(item: WineApiSearchItem) {
       : asName((item.region as { country?: string } | null)?.country),
     grape_variety: grapes.length ? grapes.join(', ') : undefined,
     wine_type: mapWineType(item.type),
+    price: typeof price === 'number' && Number.isFinite(price) ? price : undefined,
+    description: item.description?.trim() || undefined,
+    alcohol_content: typeof alcohol === 'number' && Number.isFinite(alcohol) ? alcohol : undefined,
+    average_rating: typeof item.averageRating === 'number' ? item.averageRating : undefined,
+    image_url: item.imageUrl?.trim() || undefined,
+    body: item.body?.trim() || undefined,
+    acidity: item.acidity?.trim() || undefined,
+    appellation: asName(item.appellation),
   };
 }
 
@@ -112,8 +130,42 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+    const wineId = typeof body.id === 'string' ? body.id.trim() : '';
     const query = typeof body.query === 'string' ? body.query.trim() : '';
     const limit = Math.min(Math.max(Number(body.limit) || 10, 1), 20);
+
+    const wineApiHeaders = {
+      'X-API-Key': wineApiKey,
+      Accept: 'application/json',
+    };
+
+    if (wineId) {
+      const apiResponse = await fetch(
+        `https://api.wineapi.io/wines/${encodeURIComponent(wineId)}`,
+        { headers: wineApiHeaders },
+      );
+
+      if (apiResponse.status === 404) {
+        return jsonResponse({ result: null });
+      }
+      if (apiResponse.status === 401) {
+        return jsonResponse({ error: 'Invalid wine API key' }, 502);
+      }
+      if (apiResponse.status === 429) {
+        return jsonResponse({ error: 'Wine API rate limit exceeded. Try again later.' }, 429);
+      }
+      if (!apiResponse.ok) {
+        const details = await apiResponse.text();
+        return jsonResponse({
+          error: 'Wine API lookup failed',
+          details: details.slice(0, 300),
+        }, 502);
+      }
+
+      const payload = await apiResponse.json() as WineApiSearchItem;
+      const result = mapCatalogWine(payload);
+      return jsonResponse({ result: result.external_id ? result : null });
+    }
 
     if (query.length < 2) {
       return jsonResponse({ results: [], total: 0 });
@@ -125,10 +177,7 @@ Deno.serve(async (req) => {
     url.searchParams.set('offset', '0');
 
     const apiResponse = await fetch(url.toString(), {
-      headers: {
-        'X-API-Key': wineApiKey,
-        Accept: 'application/json',
-      },
+      headers: wineApiHeaders,
     });
 
     if (apiResponse.status === 401) {
